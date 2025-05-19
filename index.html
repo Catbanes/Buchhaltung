@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Rechnungsleser PRO</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f2f2f2; }
+    textarea, input { width: 100%; padding: 10px; margin: 8px 0; font-size: 16px; }
+    button { padding: 10px; background: #007acc; color: white; border: none; cursor: pointer; }
+    .hidden { display: none; }
+    .buchung { background: white; padding: 10px; margin-top: 10px; border-left: 4px solid #007acc; }
+    .konto { margin-left: 15px; }
+    h2 { color: #004080; }
+    #preview { max-width: 100%; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Rechnungsleser PRO – Foto hochladen & Buchungssatz erhalten</h2>
+
+  <input type="file" id="imageInput" accept="image/*" onchange="readImage()">
+  <img id="preview" class="hidden" />
+  <p>Gelesener Text (automatisch erkannt oder manuell bearbeiten):</p>
+  <textarea id="aufgabe" placeholder="Texterkennung läuft ..."></textarea>
+  <button onclick="verarbeiteRechnung()">Buchungssatz generieren</button>
+
+  <div id="output"></div>
+
+  <script>
+    async function readImage() {
+      const file = document.getElementById("imageInput").files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById("preview").src = e.target.result;
+        document.getElementById("preview").classList.remove("hidden");
+      };
+      reader.readAsDataURL(file);
+
+      const result = await Tesseract.recognize(file, 'deu');
+      document.getElementById("aufgabe").value = result.data.text;
+    }
+
+    function verarbeiteRechnung() {
+      const text = document.getElementById("aufgabe").value.toLowerCase();
+      const output = document.getElementById("output");
+      output.innerHTML = "";
+
+      const bruttoMatch = text.match(/(gesamtbetrag|betrag|summe).*?([\d\.\s]+,[\d]{2}) ?€?/);
+      const ustMatch = text.match(/(mwst|ust|umsatzsteuer).*?([\d\.\s]+,[\d]{2}) ?€?/);
+      const nettoMatch = text.match(/(netto).*?([\d\.\s]+,[\d]{2}) ?€?/);
+
+      function toFloat(str) {
+        return parseFloat(str.replace(/[\.\s]/g, "").replace(",", "."));
+      }
+
+      if (bruttoMatch && ustMatch) {
+        const brutto = toFloat(bruttoMatch[2]);
+        const ust = toFloat(ustMatch[2]);
+        const netto = brutto - ust;
+
+        output.innerHTML += `<div class='buchung'><strong>Automatisch erkannter Buchungssatz:</strong>
+          <div class='konto'>Soll: 6000 Aufwand / WE ${netto.toFixed(2)} €</div>
+          <div class='konto'>Soll: 1576 Vorsteuer 19 % ${ust.toFixed(2)} €</div>
+          <div class='konto'>Haben: 1600 Verbindlichkeiten a.L.L. ${brutto.toFixed(2)} €</div>
+        </div>`;
+      } else if (nettoMatch && ustMatch) {
+        const netto = toFloat(nettoMatch[2]);
+        const ust = toFloat(ustMatch[2]);
+        const brutto = netto + ust;
+
+        output.innerHTML += `<div class='buchung'><strong>Automatisch erkannter Buchungssatz:</strong>
+          <div class='konto'>Soll: 6000 Aufwand / WE ${netto.toFixed(2)} €</div>
+          <div class='konto'>Soll: 1576 Vorsteuer 19 % ${ust.toFixed(2)} €</div>
+          <div class='konto'>Haben: 1600 Verbindlichkeiten a.L.L. ${brutto.toFixed(2)} €</div>
+        </div>`;
+      } else {
+        output.innerHTML = "<p><strong>Hinweis:</strong> Kein vollständiger Rechnungsbetrag erkannt. Bitte prüfen.</p>";
+      }
+    }
+  </script>
+</body>
+</html>
